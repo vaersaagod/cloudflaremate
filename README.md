@@ -2,7 +2,7 @@
 
 Are your clouds flaring up again, mate?
 
-![Logo](src/icon.svg | width=60)
+<img src="https://github.com/vaersaagod/cloudflaremate/blob/main/src/icon.svg" width="200" height="200" alt="Logo">
 
 ## Requirements
 
