@@ -2,7 +2,7 @@
 
 Are your clouds flaring up again, mate?
 
-![Screenshot](src/icon.svg)
+![Logo](src/icon.svg | width=60)
 
 ## Requirements
 
