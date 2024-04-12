@@ -19,7 +19,7 @@ final class ResponseHelper
      * @throws \craft\errors\MissingComponentException
      * @throws \yii\web\BadRequestHttpException
      */
-    public static function prepare(Response $response): void
+    public static function prepareResponse(Response $response): void
     {
 
         $request = Craft::$app->getRequest();
@@ -30,20 +30,19 @@ final class ResponseHelper
 
         $settings = CloudflareMate::getInstance()->getSettings();
 
-        // Set default cache control header (should just use the native no-cache header instead?
-        if (!empty($settings->defaultCacheControlHeader)) {
-            $response->getHeaders()->set('Cache-Control', $settings->defaultCacheControlHeader);
-        }
+        // Set default cache control header
+        $response->setNoCacheHeaders();
 
         // Is the request cache-able?
         if (
             !$request->getIsSiteRequest() ||
             !$request->getIsGet() ||
             $request->getIsPreview() ||
-            $request->getToken() !== null ||
+            $request->getHadToken() ||
             $request->getIsActionRequest() ||
             $request->getIsLoginRequest() ||
             $request->getParam('no-cache') ||
+            $response->content === null ||
             !$response->getIsOk() ||
             Craft::$app->getUser()->getIdentity()?->getPreference('enableDebugToolbarForSite') ||
             !empty(Craft::$app->getSession()->getAllFlashes())
@@ -52,8 +51,13 @@ final class ResponseHelper
         }
 
         // Get the URI for this request
-        $uriModel = UriHelper::getUriFromRequest($request);
+        $uriModel = UrisHelper::getUriModelFromRequest($request);
         if (empty($uriModel)) {
+            return;
+        }
+
+        // Eject if this looks like a URI that CloudflareMate should completely ignore
+        if (CloudflareMateHelper::shouldUriBeIgnored($uriModel->uri)) {
             return;
         }
 
@@ -76,7 +80,7 @@ final class ResponseHelper
 
         // Try logging the URI to the DB
         try {
-            if (!UriHelper::insertOrUpdateUri($uriModel)) {
+            if (!UrisHelper::insertOrUpdateUriRecord($uriModel)) {
                 return;
             }
         } catch (\Throwable $e) {

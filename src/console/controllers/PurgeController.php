@@ -2,10 +2,12 @@
 
 namespace vaersaagod\cloudflaremate\console\controllers;
 
-use Craft;
 use craft\console\Controller;
 
+use vaersaagod\cloudflaremate\CloudflareMate;
+use vaersaagod\cloudflaremate\helpers\ApiHelper;
 use vaersaagod\cloudflaremate\helpers\PurgeHelper;
+use vaersaagod\cloudflaremate\helpers\SiteHelper;
 
 use yii\console\ExitCode;
 use yii\helpers\BaseConsole;
@@ -34,18 +36,10 @@ class PurgeController extends Controller
         return ExitCode::OK;
     }
 
-    public function actionSite(?string $siteHandle = null): int
+    public function actionUrl(string $url, string|int|null $site = null): int
     {
-        if (!empty($siteHandle)) {
-            $site = Craft::$app->getSites()->getSiteByHandle($siteHandle);
-            if (!$site) {
-                throw new \RuntimeException("Site with handle \"$siteHandle\" not found.");
-            }
-        } else {
-            $site = Craft::$app->getSites()->getPrimarySite();
-        }
-        $this->stdout("Purging zone for site \"$site->handle\"..." . PHP_EOL, BaseConsole::FG_YELLOW);
-        $result = PurgeHelper::site($site);
+        $this->stdout("Purging URL \"$url\"..." . PHP_EOL, BaseConsole::FG_YELLOW);
+        $result = PurgeHelper::purgeUri($url, $site);
         if ($result) {
             $this->stdout("Big success!" . PHP_EOL, BaseConsole::FG_GREEN);
         } else {
@@ -54,10 +48,26 @@ class PurgeController extends Controller
         return ExitCode::OK;
     }
 
-    public function actionUrl(string $url): int
+    public function actionSite(string|int|null $site = null): int
     {
-        $this->stdout("Purging URL \"$url\"..." . PHP_EOL, BaseConsole::FG_YELLOW);
-        $result = PurgeHelper::url($url);
+        $site = SiteHelper::getSiteFromParam($site);
+        $this->stdout("Purging site \"$site->handle\"..." . PHP_EOL, BaseConsole::FG_YELLOW);
+        $result = ApiHelper::purgeSite($site);
+        if ($result) {
+            $this->stdout("Big success!" . PHP_EOL, BaseConsole::FG_GREEN);
+        } else {
+            $this->stdout("Fail" . PHP_EOL, BaseConsole::FG_RED);
+        }
+        return ExitCode::OK;
+    }
+
+    public function actionZone(string $zoneId = null): int
+    {
+        $zoneId = $zoneId ?? CloudflareMate::getInstance()->getSettings()->defaultZone;
+        if (empty($zoneId)) {
+            throw new \Exception("No zone ID");
+        }
+        $result = ApiHelper::purgeZone($zoneId);
         if ($result) {
             $this->stdout("Big success!" . PHP_EOL, BaseConsole::FG_GREEN);
         } else {

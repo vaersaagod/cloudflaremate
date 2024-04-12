@@ -2,149 +2,98 @@
 
 namespace vaersaagod\cloudflaremate\helpers;
 
-use Craft;
-use craft\helpers\App;
-use craft\helpers\UrlHelper;
+use craft\errors\SiteNotFoundException;
 use craft\models\Site;
-use GuzzleHttp\Client;
-use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Pool;
-use GuzzleHttp\Psr7\Request;
 
-use vaersaagod\cloudflaremate\CloudflareMate;
+use yii\base\Exception;
+use yii\base\InvalidConfigException;
 
 final class PurgeHelper
 {
 
-    private const API_ENDPOINT = 'https://api.cloudflare.com/client/v4/';
-
-    private const API_URLS_PER_REQUEST_LIMIT = 30;
-
-    private const API_URLS_PER_MINUTE_LIMIT = 1000; // This doesn't belong here. It should be done in a queue job, e.g. create batched job with a minute waiting time between each
-
-    public static function url(string $url, ?int $siteId = null): bool
+    /**
+     * Purges a single URI, and deletes any record of it from the database
+     *
+     * @param string $uri
+     * @param Site|string|int|null $site
+     * @return bool
+     * @throws Exception
+     * @throws InvalidConfigException
+     * @throws SiteNotFoundException
+     */
+    public static function purgeUri(string $uri, Site|string|int|null $site = null): bool
     {
-        if (UrlHelper::isRootRelativeUrl($url)) {
-            $url = UrlHelper::siteUrl($url, siteId: $siteId);
-        }
-        return PurgeHelper::urls([$url]);
+        return PurgeHelper::purgeUris([$uri], $site);
     }
 
     /**
-     * Purge an array of URLs
+     * Purges an array of URIs, and deletes any records of them from the database
      *
-     * @param array $urls
+     * @param array $uris
+     * @param Site|string|int|null $site
      * @return bool
+     * @throws Exception
+     * @throws InvalidConfigException
+     * @throws SiteNotFoundException
+     * @throws \yii\db\Exception
      */
-    public static function urls(array $urls): bool
+    public static function purgeUris(array $uris, Site|string|int|null $site = null): bool
     {
-        return PurgeHelper::_purgeFiles($urls);
-    }
-
-    /**
-     * Purges an entire site (i.e. an entire CloudFlare zone)
-     *
-     * @param int|Site|null $siteOrSiteId The site to purge the zone for, or its ID – or `null`, in which case the zone for the primary site will be purged.
-     * @return bool
-     */
-    public static function site(int|Site|null $siteOrSiteId = null): bool
-    {
-        return PurgeHelper::_purgeZone($siteOrSiteId?->id);
-    }
-
-    private static function _purgeFiles(array $files = [], ?int $siteId = null): bool
-    {
-        $files = array_values(array_unique($files));
-        if (empty($files)) {
+        $site = SiteHelper::getSiteFromParam($site);
+        // Make sure all URLs to actually purge, are fully qualified
+        $urls = array_map(static fn(string $url) => UrlHelper::getFullyQualifiedUrl($url, $site->id), $uris);
+        if (!PurgeHelper::purgeUrls($urls, $site)) {
             return false;
         }
-
-        // Batch files sa per API limit
-        $requests = [];
-        $fileBatches = array_chunk($files, PurgeHelper::API_URLS_PER_REQUEST_LIMIT);
-
-        foreach ($fileBatches as $fileBatch) {
-            $requests[] = new Request(
-                'delete',
-                '',
-                [],
-                json_encode(['files' => $fileBatch])
-            );
-        }
-
-        $client = PurgeHelper::_getClient($siteId);
-
-        // Create a pool of requests
-        $pool = new Pool($client, $requests, [
-            'fulfilled' => function() use (&$response) {
-                $response = true;
-            },
-            'rejected' => function($reason) {
-                if ($reason instanceof RequestException) {
-                    preg_match('/^(.*?)\R/', $reason->getMessage(), $matches);
-
-                    if (!empty($matches[1])) {
-                        Craft::error(trim($matches[1], ':'), __METHOD__);
-                    }
-                }
-            },
-        ]);
-
-        $pool->promise()->wait();
-
-        return $response ?? false;
-
-    }
-
-    /**
-     * @param int|null $siteId
-     * @return bool
-     */
-    private static function _purgeZone(?int $siteId): bool
-    {
-        $request = new Request(
-            'delete',
-            '',
-            [],
-            json_encode(['purge_everything' => true])
-        );
-        $client = PurgeHelper::_getClient($siteId);
-
-        try {
-            $client->send($request);
-        } catch (\Throwable $e) {
-            Craft::error($e, __METHOD__);
-            return false;
-        }
-
+        // Delete the purged URIs from the database log
+        UrisHelper::deleteUris($uris, $site->id);
         return true;
     }
 
-    private static function _getClient(?int $siteId = null): Client
+    /**
+     * Purges a single, fully qualified URL
+     *
+     * @param string $url
+     * @param Site|string|int|null $site
+     * @return bool
+     * @throws InvalidConfigException
+     * @throws SiteNotFoundException
+     */
+    public static function purgeUrl(string $url, Site|string|int|null $site = null): bool
     {
-        $settings = CloudflareMate::getInstance()->getSettings();
-        $siteId = $siteId ?? Craft::$app->getSites()->getPrimarySite()->id;
-        $site = Craft::$app->getSites()->getSiteById($siteId);
-        $zoneId = App::parseEnv($settings->zoneIds[$site?->handle] ?? null);
-
-        if (empty($zoneId)) {
-            throw new \RuntimeException("No zone ID");
-        }
-
-        $apiToken = App::parseEnv($settings->apiToken);
-
-        if (empty($apiToken)) {
-            throw new \RuntimeException("No API token");
-        }
-
-        $baseUri = self::API_ENDPOINT . "zones/$zoneId/purge_cache";
-
-        return Craft::createGuzzleClient([
-            'base_uri' => $baseUri,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $apiToken,
-            ],
-        ]);
+        return PurgeHelper::purgeUrls([$url], $site);
     }
 
+    /**
+     * Purges an array of fully qualified URLs
+     *
+     * @param array $urls
+     * @param Site|string|int|null $site
+     * @return bool
+     * @throws InvalidConfigException
+     * @throws SiteNotFoundException
+     */
+    public static function purgeUrls(array $urls, Site|string|int|null $site = null): bool
+    {
+        $zoneId = SiteHelper::getZoneIdForSite($site);
+        return ApiHelper::deleteFiles($zoneId, $urls);
+    }
+
+    /**
+     * Purges an entire site, and deletes any URIs from that site from the database
+     *
+     * @param Site|string|int|null $site
+     * @return void
+     * @throws InvalidConfigException
+     * @throws SiteNotFoundException
+     * @throws \yii\db\Exception
+     */
+    public static function purgeSite(Site|string|int|null $site): void
+    {
+        $site = SiteHelper::getSiteFromParam($site);
+        $zoneId = SiteHelper::getZoneIdForSite($site);
+        if (ApiHelper::purgeZone($zoneId)) {
+            UrisHelper::deleteAllUrisForSite($site->id);
+        }
+    }
 }

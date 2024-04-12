@@ -3,6 +3,7 @@
 namespace vaersaagod\cloudflaremate;
 
 use Craft;
+use craft\base\Element;
 use craft\base\Model;
 use craft\base\Plugin;
 use craft\events\BatchElementActionEvent;
@@ -16,7 +17,7 @@ use Psr\Log\LogLevel;
 
 use vaersaagod\cloudflaremate\helpers\ResponseHelper;
 use vaersaagod\cloudflaremate\models\Settings;
-use vaersaagod\cloudflaremate\services\Purge;
+use vaersaagod\cloudflaremate\services\ElementPurger;
 
 use yii\base\Event;
 use yii\web\Response as BaseResponse;
@@ -26,7 +27,7 @@ use yii\web\Response as BaseResponse;
  *
  * @method static CloudflareMate getInstance()
  * @method Settings getSettings()
- * @property-read Purge $purge
+ * @property-read ElementPurger $elementPurger
  */
 class CloudflareMate extends Plugin
 {
@@ -36,7 +37,7 @@ class CloudflareMate extends Plugin
     public static function config(): array
     {
         return [
-            'components' => ['purge' => Purge::class],
+            'components' => ['elementPurger' => ElementPurger::class],
         ];
     }
 
@@ -75,29 +76,45 @@ class CloudflareMate extends Plugin
 
         Event::on(
             Response::class,
-            BaseResponse::EVENT_BEFORE_SEND,
-            function (Event $event) {
-                if (!$event->sender instanceof Response) {
+            BaseResponse::EVENT_AFTER_PREPARE,
+            static function (Event $event) {
+                /** @var Response $response */
+                $response = $event->sender;
+                if (!$response instanceof Response) {
                     return;
                 }
-                ResponseHelper::prepare($event->sender);
-            }
+                ResponseHelper::prepareResponse($response);
+            },
+            append: false
         );
 
-        $elementsEvents = [
+        $elementEvents = [
+            Elements::EVENT_BEFORE_SAVE_ELEMENT,
             Elements::EVENT_AFTER_SAVE_ELEMENT,
+            Elements::EVENT_BEFORE_RESAVE_ELEMENT,
             Elements::EVENT_AFTER_RESAVE_ELEMENT,
+            Elements::EVENT_BEFORE_UPDATE_SLUG_AND_URI,
             Elements::EVENT_AFTER_UPDATE_SLUG_AND_URI,
             Elements::EVENT_AFTER_DELETE_ELEMENT,
             Elements::EVENT_AFTER_RESTORE_ELEMENT,
         ];
-        foreach ($elementsEvents as $elementsEvent) {
+        foreach ($elementEvents as $elementEvent) {
             Event::on(
                 Elements::class,
-                $elementsEvent,
+                $elementEvent,
                 static function (ElementEvent|BatchElementActionEvent $event) {
                     $element = $event->element;
-                    CloudflareMate::getInstance()->purge->maybePurgeElement($element);
+                    if (!$element instanceof Element) {
+                        return;
+                    }
+                    try {
+                        CloudflareMate::getInstance()->elementPurger->purgeElementUris($element);
+                    } catch (\Throwable $e) {
+                        if (App::devMode()) {
+                            throw $e;
+                        }
+                        Craft::error($e, __METHOD__);
+                    }
                 }
             );
         }

@@ -34,9 +34,9 @@ class Install extends Migration
         $tablesCreated = false;
 
         // Tracker table (log)
-        $trackerTableSchema = Craft::$app->db->schema->getTableSchema('{{%redirectmate_tracker}}');
+        $urisTableSchema = Craft::$app->db->schema->getTableSchema(UriRecord::tableName());
 
-        if ($trackerTableSchema === null) {
+        if ($urisTableSchema === null) {
             $tablesCreated = true;
             $this->createTable(
                 UriRecord::tableName(),
