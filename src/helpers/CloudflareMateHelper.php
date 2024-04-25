@@ -205,11 +205,12 @@ final class CloudflareMateHelper
                 continue;
             }
             try {
-                return (bool)preg_match("/$uriPattern/", $uri);
+                if (preg_match("/$uriPattern/", $uri)) {
+                    return true;
+                }
             } catch (\Throwable $e) {
                 Craft::error("Invalid regex pattern \"$uriPattern\"", __METHOD__);
                 Craft::error($e, __METHOD__);
-                return false;
             }
         }
         return false;
