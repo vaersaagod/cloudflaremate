@@ -62,6 +62,10 @@ class CloudflareMate extends Plugin
         });
     }
 
+    /**
+     * @return Model|null
+     * @throws \yii\base\InvalidConfigException
+     */
     protected function createSettingsModel(): ?Model
     {
         return Craft::createObject(Settings::class);
