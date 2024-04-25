@@ -6,10 +6,11 @@ Are your clouds flaring up again, mate?
 
 ## Description
 
-CloudflareMate makes life easier when using Cloudflare to statically cache Craft CMS sites, by  
+CloudflareMate makes life a little bit easier when using Cloudflare to statically cache Craft CMS sites, by  
 
-1. Making sure that requests are served with proper Cache-Control headers 
-2. Purging Cloudfare caches automatically when elements are created, saved, moved, deleted, etc.
+1. ...making sure that requests are served with proper Cache-Control headers 
+2. ...purging Cloudfare caches automatically when elements are created, saved, moved, deleted, etc.
+3. ...exposing some nifty buttons in the CP for purging the edge cache manually
 
 ## Requirements
 

@@ -1,0 +1,156 @@
+{% import '_includes/forms' as forms %}
+
+<h1>Cloudflare</h1>
+
+<div style="max-width:60px;">
+    {{ svg("@vaersaagod/cloudflaremate/icon.svg") }}
+</div>
+
+<hr/>
+
+<section>
+    <h2>Purge site</h2>
+
+    <p>Purges the entire Cloudflare zone for the selected site.</p>
+
+    <form class="flex" method="post" accept-charset="UTF-8">
+        {{ forms.selectField({
+            name: 'site',
+            options: craft.app.sites.getAllSites(true)|map(site => {
+                label: site.name,
+                value: site.handle
+            })
+        }) }}
+        {{ forms.submitButton({
+            id: 'cloudflaremate-purgesite-submit',
+            label: 'Purge site',
+            spinner: true,
+        }) }}
+    </form>
+
+    {% js %}
+        $(() => {
+            const purgeSiteButton = document.getElementById('cloudflaremate-purgesite-submit');
+            if (!purgeSiteButton) {
+                return;
+            }
+            purgeSiteButton.addEventListener('click', e => {
+                e.preventDefault();
+                if (purgeSiteButton.classList.contains('loading')) {
+                    return;
+                }
+                purgeSiteButton.classList.add('loading');
+                const site = purgeSiteButton.closest('form').querySelector('select[name="site"]').value;
+                Craft.sendActionRequest(
+                    'POST',
+                    '_cloudflaremate/cp/purge-site',
+                    {
+                        data: {
+                            site
+                        }
+                    }
+                )
+                    .then(res => {
+                        Craft.cp.displayNotice(res.data.message);
+                    })
+                    .catch(({response}) => {
+                        Craft.cp.displayError(response.message || response.data.message);
+                    })
+                    .catch(error => {
+                        console.error(error);
+                    })
+                    .then(() => {
+                        purgeSiteButton.classList.remove('loading');
+                    });
+            });
+        });
+    {% endjs %}
+
+</section>
+
+<hr />
+
+<section>
+    <h2>Purge URI</h2>
+
+    <p>Purges a specific URI from Cloudflare.</p>
+
+    <form class="flex" method="post" accept-charset="UTF-8">
+        {{ forms.selectField({
+            name: 'site',
+            options: craft.app.sites.getAllSites(true)|map(site => {
+                label: site.name,
+                value: site.handle
+            })
+        }) }}
+        {{ forms.textField({
+            name: 'uri',
+            placeholder: 'URI'
+        })|attr({
+            style: 'flex: 1 1 auto;max-width:380px;'
+        }) }}
+        {{ forms.submitButton({
+            id: 'cloudflaremate-purgeuri-submit',
+            label: 'Purge URI',
+            spinner: true,
+        }) }}
+    </form>
+
+    {% js %}
+    $(() => {
+        const purgeUriButton = document.getElementById('cloudflaremate-purgeuri-submit');
+        if (!purgeUriButton) {
+            return;
+        }
+        purgeUriButton.addEventListener('click', e => {
+            e.preventDefault();
+            if (purgeUriButton.classList.contains('loading')) {
+                return;
+            }
+            purgeUriButton.classList.add('loading');
+            const site = purgeUriButton.closest('form').querySelector('select[name="site"]').value;
+            const uri = purgeUriButton.closest('form').querySelector('input[name="uri"]').value;
+            Craft.sendActionRequest(
+                'POST',
+                '_cloudflaremate/cp/purge-uri',
+                {
+                    data: {
+                        site,
+                        uri
+                    }
+                }
+            )
+                .then(res => {
+                    Craft.cp.displayNotice(res.data.message);
+                })
+                .catch(({response}) => {
+                    Craft.cp.displayError(response.message || response.data.message);
+                })
+                .catch(error => {
+                    console.error(error);
+                })
+                .then(() => {
+                    purgeUriButton.classList.remove('loading');
+                });
+        });
+    });
+    {% endjs %}
+
+</section>
+
+<hr />
+
+<section>
+
+    <h2>Logged URIs</h2>
+
+    {% set uriCount = craft.query()
+        .select('uri')
+        .from('{{%cloudflaremate_uris}}')
+        .distinct()
+        .count()
+    %}
+
+    <p><strong>{{ uriCount }}</strong> unique URIs currently logged.</p>
+
+</section>

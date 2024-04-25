@@ -3,21 +3,28 @@
 namespace vaersaagod\cloudflaremate;
 
 use Craft;
+use craft\elements\Entry;
+use craft\events\DefineHtmlEvent;
+use craft\helpers\ElementHelper;
+use craft\web\twig\variables\CraftVariable;
+use Psr\Log\LogLevel;
 use craft\base\Element;
 use craft\base\Model;
 use craft\base\Plugin;
 use craft\events\BatchElementActionEvent;
 use craft\events\ElementEvent;
+use craft\events\RegisterComponentTypesEvent;
 use craft\helpers\App;
 use craft\log\MonologTarget;
 use craft\services\Elements;
+use craft\services\Utilities;
 use craft\web\Response;
-
-use Psr\Log\LogLevel;
 
 use vaersaagod\cloudflaremate\helpers\ResponseHelper;
 use vaersaagod\cloudflaremate\models\Settings;
 use vaersaagod\cloudflaremate\services\ElementPurger;
+use vaersaagod\cloudflaremate\utilities\CloudflareMateUtility;
+use vaersaagod\cloudflaremate\web\twig\variables\CloudflareMateVariable;
 
 use yii\base\Event;
 use yii\web\Response as BaseResponse;
@@ -57,7 +64,7 @@ class CloudflareMate extends Plugin
         ]);
 
         // Defer most setup tasks until Craft is fully initialized
-        Craft::$app->onInit(function() {
+        Craft::$app->onInit(function () {
             $this->attachEventHandlers();
         });
     }
@@ -77,6 +84,50 @@ class CloudflareMate extends Plugin
      */
     private function attachEventHandlers(): void
     {
+
+        Event::on(
+            Utilities::class,
+            Utilities::EVENT_REGISTER_UTILITY_TYPES,
+            static function (RegisterComponentTypesEvent $event) {
+                $event->types[] = CloudflareMateUtility::class;
+            }
+        );
+
+        Event::on(
+            CraftVariable::class,
+            CraftVariable::EVENT_INIT,
+            static function(Event $event) {
+                /** @var CraftVariable $variable */
+                $variable = $event->sender;
+                $variable->set('cloudflareMate', CloudflareMateVariable::class);
+            }
+        );
+
+        Event::on(
+            Entry::class,
+            Element::EVENT_DEFINE_SIDEBAR_HTML,
+            static function (DefineHtmlEvent $event) {
+                if ($event->static) {
+                    return;
+                }
+                $element = $event->sender;
+                if (!$element instanceof Element || empty($element->id)) {
+                    return;
+                }
+                try {
+                    if (ElementHelper::isDraftOrRevision($element)) {
+                        $canonical = $element->getCanonical();
+                        if ($element->id === $canonical->id) {
+                            return;
+                        }
+                        $element = $canonical;
+                    }
+                    $event->html .= Craft::$app->getView()->renderTemplate('_cloudflaremate/meta-panel.twig', ['element' => $element]);
+                } catch (\Throwable $e) {
+                    Craft::error($e, __METHOD__);
+                }
+            }
+        );
 
         Event::on(
             Response::class,

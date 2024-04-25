@@ -41,7 +41,7 @@ final class ApiHelper
 
         Craft::info('Deleting ' . count($files) . ' files from Cloudflare: ' . json_encode($files), __METHOD__);
 
-        // Batch files sa per API limit
+        // Batch files as per API limit
         $requests = [];
         $fileBatches = array_chunk($files, ApiHelper::API_URLS_PER_REQUEST_LIMIT);
 

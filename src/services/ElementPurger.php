@@ -204,7 +204,7 @@ class ElementPurger extends Component
                 continue;
             }
             $site = Craft::$app->getSites()->getSiteByHandle($siteHandle, true);
-            $urisToPurge = $this->_getAllElementUrisToPurge($uris, $elementIds, $site->id);
+            $urisToPurge = CloudflareMateHelper::getUrisToPurgeFromSourceUrisAndIds($uris, $elementIds, $site->id);
             if (empty($urisToPurge)) {
                 continue;
             }
@@ -228,50 +228,6 @@ class ElementPurger extends Component
         }
 
         $this->_stuffToPurge = [];
-
-    }
-
-    /**
-     * @param array $uris
-     * @param array $elementIds
-     * @param int $siteId
-     * @return array
-     */
-    private function _getAllElementUrisToPurge(array $uris, array $elementIds, int $siteId): array
-    {
-
-        if (empty($uris) && empty($elementIds)) {
-            return [];
-        }
-
-        // Get additional URIs from relations
-        $relationUris = CloudflareMateHelper::getUrisFromElementRelations($elementIds, $siteId);
-
-        $uris = array_unique([
-            ...$uris,
-            ...$relationUris,
-        ]);
-
-        // Get additional URIs to purge as per the `additionalUrisToPurge` config setting
-        $purgePatternUris = CloudflareMateHelper::getAdditionalUrisToPurge($uris);
-
-        $uris = array_unique([
-            ...$uris,
-            ...$purgePatternUris,
-        ]);
-
-        // Get additional URIs from the uris database table, that begins with any of our uris
-        $prefixUrls = CloudflareMateHelper::getLoggedUrisByPrefix($uris, $siteId);
-
-        $uris = array_unique([
-            ...$uris,
-            ...$prefixUrls,
-        ]);
-
-        // Finally, strip out any uris that we want to ignore
-        $uris = array_filter($uris, static fn(string $uri) => !CloudflareMateHelper::shouldUriBeIgnored($uri));
-
-        return array_values($uris);
 
     }
 

@@ -52,7 +52,7 @@ class PurgeController extends Controller
     {
         $site = SiteHelper::getSiteFromParam($site);
         $this->stdout("Purging site \"$site->handle\"..." . PHP_EOL, BaseConsole::FG_YELLOW);
-        $result = ApiHelper::purgeSite($site);
+        $result = PurgeHelper::purgeSite($site);
         if ($result) {
             $this->stdout("Big success!" . PHP_EOL, BaseConsole::FG_GREEN);
         } else {

@@ -1,0 +1,50 @@
+{% import '_includes/forms' as forms %}
+
+<div style="margin:25px 0;">
+    {{ forms.button({
+        label: 'Purge from Cloudflare',
+        spinner: true,
+        class: 'submit',
+        attributes: {
+            'data-cloudflaremate-purge-button': true,
+            'data-element-id': element.id,
+            'data-site-id': element.siteId
+        }
+    }) }}
+</div>
+
+{% js %}
+$(() => {
+    $('body').on('click', 'button[data-cloudflaremate-purge-button]', e => {
+        const button = e.currentTarget;
+        if (button.classList.contains('loading')) {
+            return;
+        }
+        const elementId = parseInt(button.dataset.elementId, 10);
+        const siteId = parseInt(button.dataset.siteId, 10);
+        button.classList.add('loading');
+        Craft.sendActionRequest(
+            'POST',
+            '_cloudflaremate/cp/purge-element',
+            {
+                data: {
+                    elementId,
+                    siteId
+                }
+            }
+        )
+            .then(res => {
+                Craft.cp.displayNotice(res.data.message);
+            })
+            .catch(({response}) => {
+                Craft.cp.displayError(response.message || response.data.message);
+            })
+            .catch(error => {
+                console.error(error);
+            })
+            .then(() => {
+                button.classList.remove('loading');
+            });
+    });
+});
+{% endjs %}
