@@ -28,6 +28,9 @@ class Settings extends Model
     /** @var array An array of key => value pairs, where the keys are URI patterns, and the values are arrays of additional URIs to clear for those patterns */
     public array $additionalUrisToPurge = [];
 
+    /** @var array An array of key => value pairs, where the keys are element sources (e.g. "section:news", and the values are arrays of additional URIs to purge for those sources) */
+    public array $elements = [];
+
     /** @var array An array of URIs (or URI patterns) to ignore completely, both from purging and from setting proper Cache-Control headers **/
     public array $ignoredUris = [];
 

@@ -5,12 +5,17 @@ namespace vaersaagod\cloudflaremate\services;
 use Craft;
 use craft\base\ElementInterface;
 use craft\elements\Asset;
+use craft\elements\Category;
+use craft\elements\Entry;
 use craft\elements\GlobalSet;
+use craft\elements\MatrixBlock;
+use craft\elements\User;
 use craft\errors\SiteNotFoundException;
 use craft\helpers\App;
 use craft\helpers\ElementHelper;
 use craft\helpers\Queue;
 
+use vaersaagod\cloudflaremate\CloudflareMate;
 use vaersaagod\cloudflaremate\helpers\ApiHelper;
 use vaersaagod\cloudflaremate\helpers\CloudflareMateHelper;
 use vaersaagod\cloudflaremate\helpers\UrlHelper;
@@ -18,6 +23,7 @@ use vaersaagod\cloudflaremate\jobs\PurgeUrisJob;
 
 use vaersaagod\cloudflaremate\jobs\PurgeZoneJob;
 
+use verbb\supertable\elements\SuperTableBlockElement;
 use yii\base\Component;
 use yii\base\Event;
 use yii\base\InvalidConfigException;
@@ -115,6 +121,52 @@ class ElementPurger extends Component
             }
         }
 
+        // Add additional URIs based on element sources
+        $elementSourcesToPurge = CloudflareMate::getInstance()->getSettings()->elements;
+        if (!empty($elementSourcesToPurge)) {
+            $elementSources = [];
+            if ($element instanceof MatrixBlock || $element instanceof SuperTableBlockElement) {
+                try {
+                    $element = $element->getOwner();
+                } catch (\Throwable $e) {
+                    Craft::error($e, __METHOD__);
+                    return;
+                }
+            }
+            if ($element instanceof Entry) {
+                $sectionHandle = $element->getSection()?->handle;
+                if ($sectionHandle) {
+                    $elementSources[] = "section:$sectionHandle";
+                }
+                $typeHandle = $element->getType()?->handle;
+                if ($typeHandle) {
+                    $elementSources[] = "type:$typeHandle";
+                }
+            } else if ($element instanceof Category) {
+                $groupHandle = $element->getGroup()?->handle;
+                if ($groupHandle) {
+                    $elementSources[] = "group:$groupHandle";
+                }
+            } else if ($element instanceof Asset) {
+                $volumeHandle = $element->getVolume()?->handle;
+                if ($volumeHandle) {
+                    $elementSources[] = "volume:$volumeHandle";
+                }
+            } else if ($element instanceof User) {
+                $elementSources[] = 'users';
+            }
+            foreach ($elementSourcesToPurge as $elementSourceKey => $urisToPurge) {
+                $elementSourceKey = preg_replace('/\s+/', '', $elementSourceKey);
+                if (empty($elementSourceKey) || !in_array($elementSourceKey, $elementSources, true)) {
+                    continue;
+                }
+                $this->_stuffToPurge[$site->handle]['uris'] = [
+                    ...($this->_stuffToPurge[$site->handle]['uris'] ?? []),
+                    ...$urisToPurge,
+                ];
+            }
+        }
+
     }
 
     /**
@@ -146,8 +198,8 @@ class ElementPurger extends Component
         $delay = 0;
         $urisCounter = 0;
         foreach ($this->_stuffToPurge as $siteHandle => $stuff) {
-            $uris = $stuff['uris'] ?? null;
-            $elementIds = $stuff['elementIds'] ?? null;
+            $uris = $stuff['uris'] ?? [];
+            $elementIds = $stuff['elementIds'] ?? [];
             if (empty($uris) && empty($elementIds)) {
                 continue;
             }
