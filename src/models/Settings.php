@@ -11,7 +11,7 @@ class Settings extends Model
 {
 
     /** @var string The Cache-Control header set for the request if/when CFM figures it can be cached */
-    public string $cacheControlHeader = 'public, max-age=31536000'; // TODO validation. This is required
+    public string $cacheControlHeader = 'public, s-maxage=31536000, max-age=0'; // TODO validation. This is required
 
     /** @var string A Cloudflare API token (not key!) */
     public string $apiToken;
